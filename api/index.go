@@ -3,8 +3,101 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 )
 
+var lineBotHandler *LineBotHandler
+
+func init() {
+	var err error
+	lineBotHandler, err = NewLineBotHandler()
+	if err != nil {
+		fmt.Printf("LINE Bot初期化エラー: %v\n", err)
+	}
+}
+
+// Handler メインハンドラー（Webhook受信）
 func Handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "<h1>Hello from Go!</h1>")
+	path := strings.TrimPrefix(r.URL.Path, "/api")
+
+	switch path {
+	case "":
+		// LINE Webhook
+		if lineBotHandler != nil {
+			lineBotHandler.HandleWebhook(w, r)
+		} else {
+			http.Error(w, "LINE Bot初期化エラー", http.StatusInternalServerError)
+		}
+	case "/cron":
+		// 定期実行エンドポイント
+		handleCron(w, r)
+	case "/health":
+		// ヘルスチェック
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "OK")
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+// handleCron 定期実行ハンドラー
+func handleCron(w http.ResponseWriter, r *http.Request) {
+	// 認証チェック
+	cronSecret := os.Getenv("CRON_SECRET")
+	if cronSecret == "" {
+		http.Error(w, "CRON_SECRET not configured", http.StatusInternalServerError)
+		return
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "Bearer "+cronSecret {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// メソッドチェック
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 定期実行処理
+	if err := executeScheduledTask(); err != nil {
+		http.Error(w, "Scheduled task failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "Scheduled task completed")
+}
+
+// executeScheduledTask 定期実行タスク
+func executeScheduledTask() error {
+	if lineBotHandler == nil {
+		return fmt.Errorf("LINE Bot not initialized")
+	}
+
+	// 残高情報を取得
+	balance, err := lineBotHandler.coincheck.GetBalance()
+	if err != nil {
+		return fmt.Errorf("failed to get balance: %v", err)
+	}
+
+	// メッセージをフォーマット
+	message := lineBotHandler.coincheck.FormatBalanceMessage(balance)
+	message = "📅 定期レポート\n\n" + message
+
+	// プッシュメッセージを送信（全ユーザーに送信する場合は、ユーザーIDリストが必要）
+	// 現在は単一ユーザーを想定
+	userID := os.Getenv("LINE_USER_ID")
+	if userID == "" {
+		return fmt.Errorf("LINE_USER_ID not configured")
+	}
+
+	if err := lineBotHandler.SendPushMessage(userID, message); err != nil {
+		return fmt.Errorf("failed to send push message: %v", err)
+	}
+
+	return nil
 }

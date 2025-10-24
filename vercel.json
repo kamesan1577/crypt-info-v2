@@ -3,5 +3,16 @@
         "env": {
             "GO_BUILD_FLAGS": "-ldflags '-s -w'"
         }
-    }
+    },
+    "functions": {
+        "api/index.go": {
+            "runtime": "go1.x"
+        }
+    },
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "/api/index.go"
+        }
+    ]
 }
