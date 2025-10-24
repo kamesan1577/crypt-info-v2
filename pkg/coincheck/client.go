@@ -352,7 +352,7 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 		if parsed, err := strconv.ParseFloat(jpyBalance, 64); err == nil {
 			jpyAmount = parsed
 		}
-		message += fmt.Sprintf("💴 JPY: %s円\n", jpyBalance)
+		message += fmt.Sprintf("💴 JPY: %s円\n", formatNumberWithCommas(jpyBalance))
 	}
 
 	// 暗号通貨残高（0以外のみ表示）
@@ -474,17 +474,16 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 		if trimmedAmount != "" && trimmedAmount != "0" {
 			// 金額を数値に変換
 			if parsedAmount, err := strconv.ParseFloat(trimmedAmount, 64); err == nil && parsedAmount > 0 {
-				message += fmt.Sprintf("🪙 %s: %s", symbol, trimmedAmount)
+				message += fmt.Sprintf("🪙 %s: %s\n", symbol, formatNumberWithCommas(trimmedAmount))
 
 				// 価格情報を取得して円換算
 				if pair, exists := supportedPairs[symbol]; exists {
 					if ticker, err := c.GetTicker(pair); err == nil {
 						cryptoValue := parsedAmount * ticker.Last
 						totalCryptoValue += cryptoValue
-						message += fmt.Sprintf(" (約%.0f円)", cryptoValue)
+						message += fmt.Sprintf("   (約%s円)\n", formatNumberWithCommas(fmt.Sprintf("%.0f", cryptoValue)))
 					}
 				}
-				message += "\n"
 			}
 		}
 	}
@@ -492,7 +491,7 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	// 合計金額を表示
 	totalValue := jpyAmount + totalCryptoValue
 	if totalValue > 0 {
-		message += fmt.Sprintf("\n📊 合計: 約%.0f円", totalValue)
+		message += fmt.Sprintf("\n📊 合計: 約%s円", formatNumberWithCommas(fmt.Sprintf("%.0f", totalValue)))
 	} else {
 		message += "\n📊 現在の残高: 0円"
 	}
@@ -502,4 +501,51 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	message += "\n📅 " + time.Now().In(jst).Format("2006年1月2日 15:04 JST")
 
 	return message
+}
+
+// formatNumberWithCommas 数値文字列にカンマを追加
+func formatNumberWithCommas(numStr string) string {
+	if numStr == "" || numStr == "0" {
+		return numStr
+	}
+
+	// 小数点があるかチェック
+	parts := strings.Split(numStr, ".")
+	integerPart := parts[0]
+
+	// 負の数の場合
+	isNegative := false
+	if len(integerPart) > 0 && integerPart[0] == '-' {
+		isNegative = true
+		integerPart = integerPart[1:]
+	}
+
+	// カンマを追加
+	if len(integerPart) <= 3 {
+		if isNegative {
+			return "-" + integerPart
+		}
+		return integerPart
+	}
+
+	var result strings.Builder
+	if isNegative {
+		result.WriteString("-")
+	}
+
+	// 3桁ごとにカンマを挿入
+	for i, digit := range integerPart {
+		if i > 0 && (len(integerPart)-i)%3 == 0 {
+			result.WriteString(",")
+		}
+		result.WriteRune(digit)
+	}
+
+	// 小数点部分を追加
+	if len(parts) > 1 {
+		result.WriteString(".")
+		result.WriteString(parts[1])
+	}
+
+	return result.String()
 }
