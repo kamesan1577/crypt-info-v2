@@ -11,17 +11,19 @@ cp .env.sample .env
 
 2. `.env`ファイルを編集して実際の値を設定:
 ```bash
-# LINE Bot設定
+# LINE Bot設定（必須）
 LINE_CHANNEL_SECRET=実際のチャンネルシークレット
 LINE_CHANNEL_ACCESS_TOKEN=実際のアクセストークン
-LINE_USER_ID=実際のユーザーID
 
-# Coincheck API設定
+# Coincheck API設定（必須）
 COINCHECK_API_KEY=実際のAPIキー
 COINCHECK_API_SECRET=実際のシークレットキー
 
-# 定期実行設定
-CRON_SECRET=ランダムな文字列
+# 定期実行時の追加送信用（オプション）
+# ブロードキャスト機能により、友達登録ユーザー全員と参加グループに自動送信されます
+LINE_USER_ID=実際のユーザーID（個別追加送信用）
+LINE_GROUP_ID=実際のグループID（個別追加送信用）
+LINE_MULTIPLE_IDS=user1,group1,user2（複数ID追加送信用）
 
 # ローカル開発用
 PORT=8080
@@ -81,19 +83,27 @@ https://abc123.ngrok.io/api
 # ヘルスチェック
 curl http://localhost:8080/api/health
 
-# 定期実行テスト（認証が必要）
-curl -X POST \
-  -H "Authorization: Bearer your_cron_secret" \
-  -H "Content-Type: application/json" \
+# 定期実行テスト（Vercel Cron認証が必要）
+curl -X GET \
+  -H "User-Agent: vercel-cron/1.0" \
   http://localhost:8080/api/cron
 ```
 
-### 5. LINE User IDの取得方法
+### 5. LINE IDの取得方法
 
+#### ユーザーIDの取得
 1. LINE Botに友達追加
 2. Botにメッセージを送信
 3. VercelのFunction LogsまたはローカルログでUser IDを確認
 4. `.env`ファイルの`LINE_USER_ID`に設定
+
+#### グループIDの取得
+1. LINE Botをグループに招待
+2. グループ内でBotに「id」または「ID」と送信
+3. Botが返信するグループIDを確認
+4. `.env`ファイルの`LINE_GROUP_ID`に設定
+
+**注意**: ブロードキャスト機能により、定期実行時は友達登録ユーザー全員と参加しているグループに自動でメッセージが送信されます。個別IDの設定は追加送信用です。
 
 ### 6. Coincheck APIのテスト
 
@@ -136,5 +146,11 @@ go run main.go
    - API権限が適切に設定されているか確認
 
 4. **定期実行が動作しない**
-   - CRON_SECRETが一致しているか確認
-   - Authorizationヘッダーが正しく設定されているか確認
+   - Vercel Cron JobsのUser-Agentが正しく設定されているか確認
+   - GETリクエストで送信されているか確認
+   - LINE Botのブロードキャスト機能が有効になっているか確認
+
+5. **ブロードキャストメッセージが送信されない**
+   - LINE Botが友達登録されているか確認
+   - ブロードキャスト機能が有効になっているか確認
+   - 参加しているグループがあるか確認（グループ送信の場合）

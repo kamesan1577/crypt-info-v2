@@ -16,7 +16,22 @@ func main() {
 		"LINE_CHANNEL_ACCESS_TOKEN",
 		"COINCHECK_API_KEY",
 		"COINCHECK_API_SECRET",
-		"LINE_USER_ID",
+	}
+
+	// ブロードキャスト機能を使用するため、個別のID設定は任意
+	// 友達登録ユーザー全員と参加しているグループに自動でメッセージが送信されます
+	lineUserID := os.Getenv("LINE_USER_ID")
+	lineGroupID := os.Getenv("LINE_GROUP_ID")
+	lineMultipleIDs := os.Getenv("LINE_MULTIPLE_IDS")
+
+	if lineUserID != "" || lineGroupID != "" || lineMultipleIDs != "" {
+		log.Printf("個別指定のIDが設定されています（ブロードキャストに加えて追加送信されます）")
+		log.Printf("LINE_USER_ID: %s", lineUserID)
+		log.Printf("LINE_GROUP_ID: %s", lineGroupID)
+		log.Printf("LINE_MULTIPLE_IDS: %s", lineMultipleIDs)
+	} else {
+		log.Printf("ブロードキャスト機能を使用します（友達登録ユーザー全員と参加グループに送信）")
+		log.Printf("個別指定のIDは設定されていません")
 	}
 
 	for _, envVar := range requiredEnvVars {
