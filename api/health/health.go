@@ -1,4 +1,4 @@
-package api
+package health
 
 import (
 	"encoding/json"
@@ -6,8 +6,6 @@ import (
 	"log"
 	"net/http"
 	"time"
-
-	"crypt-info-v2/pkg/linebot"
 )
 
 // LogEntry APIログエントリ
@@ -42,59 +40,32 @@ func logMessage(level, message string, data map[string]interface{}) {
 	log.Printf("%s", string(logJSON))
 }
 
-// logError APIエラーログを出力
-func logError(message string, err error, data map[string]interface{}) {
-	if data == nil {
-		data = make(map[string]interface{})
-	}
-	if err != nil {
-		data["error"] = err.Error()
-	}
-	logMessage("ERROR", message, data)
-}
-
 // logInfo API情報ログを出力
 func logInfo(message string, data map[string]interface{}) {
 	logMessage("INFO", message, data)
 }
 
-var lineBotHandler *linebot.Handler
-
 func init() {
-	logInfo("API初期化開始", nil)
-
-	var err error
-	lineBotHandler, err = linebot.NewHandler()
-	if err != nil {
-		logError("LINE Bot初期化エラー", err, nil)
-		fmt.Printf("LINE Bot初期化エラー: %v\n", err)
-	} else {
-		logInfo("API初期化完了", nil)
-	}
+	logInfo("Health API初期化完了", nil)
 }
 
-// POST LINE Webhookエンドポイント（Vercel Functions形式）
-func POST(w http.ResponseWriter, r *http.Request) {
+// GET ヘルスチェックエンドポイント（Vercel Functions形式）
+func GET(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-	requestID := fmt.Sprintf("webhook_%d", time.Now().UnixNano())
+	requestID := fmt.Sprintf("health_%d", time.Now().UnixNano())
 
-	logInfo("LINE Webhook受信", map[string]interface{}{
+	logInfo("ヘルスチェックリクエスト受信", map[string]interface{}{
 		"request_id":  requestID,
 		"method":      r.Method,
 		"user_agent":  r.Header.Get("User-Agent"),
 		"remote_addr": r.RemoteAddr,
 	})
 
-	if lineBotHandler != nil {
-		lineBotHandler.HandleWebhook(w, r)
-		logInfo("LINE Webhook処理完了", map[string]interface{}{
-			"request_id":  requestID,
-			"duration_ms": time.Since(startTime).Milliseconds(),
-		})
-	} else {
-		logError("LINE Bot初期化エラー", nil, map[string]interface{}{
-			"request_id": requestID,
-		})
-		http.Error(w, "LINE Bot初期化エラー", http.StatusInternalServerError)
-	}
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "OK")
+
+	logInfo("ヘルスチェック完了", map[string]interface{}{
+		"request_id":  requestID,
+		"duration_ms": time.Since(startTime).Milliseconds(),
+	})
 }

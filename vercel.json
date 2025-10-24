@@ -4,6 +4,17 @@
             "GO_BUILD_FLAGS": "-ldflags '-s -w'"
         }
     },
+    "functions": {
+        "api/index.go": {
+            "runtime": "go1.x"
+        },
+        "api/cron/cron.go": {
+            "runtime": "go1.x"
+        },
+        "api/health/health.go": {
+            "runtime": "go1.x"
+        }
+    },
     "crons": [
         {
             "path": "/api/cron",
