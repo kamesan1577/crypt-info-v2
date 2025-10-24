@@ -71,6 +71,11 @@ func init() {
 		logError("LINE Bot初期化エラー", err, nil)
 		fmt.Printf("LINE Bot初期化エラー: %v\n", err)
 	} else {
+		// Webhook接続確認
+		if err := lineBotHandler.VerifyWebhookConnection(); err != nil {
+			logError("Webhook接続確認エラー", err, nil)
+			fmt.Printf("Webhook接続確認エラー: %v\n", err)
+		}
 		logInfo("API初期化完了", nil)
 	}
 }
@@ -94,6 +99,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	switch path {
 	case "":
+		// ルートパス - ヘルスチェックとして使用
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "Crypt Info API is running")
+		statusCode = http.StatusOK
+		responseMessage = "API is running"
+	case "/webhook":
 		// LINE Webhook
 		if lineBotHandler != nil {
 			lineBotHandler.HandleWebhook(w, r)

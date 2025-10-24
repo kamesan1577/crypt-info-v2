@@ -10,6 +10,10 @@
             "destination": "/api"
         },
         {
+            "source": "/api/webhook",
+            "destination": "/api"
+        },
+        {
             "source": "/api/cron",
             "destination": "/api"
         },

@@ -130,10 +130,28 @@ func NewHandler() (*Handler, error) {
 
 // VerifySignature 署名を検証
 func (h *Handler) VerifySignature(body []byte, signature string) bool {
+	if signature == "" {
+		logError("署名が空です", nil, nil)
+		return false
+	}
+
+	// X-Line-Signatureヘッダーから署名を抽出（プレフィックスを除去）
+	signature = strings.TrimPrefix(signature, "sha256=")
+
+	// HMAC-SHA256で署名を生成
 	hash := hmac.New(sha256.New, []byte(h.channelSecret))
 	hash.Write(body)
 	expectedSignature := base64.StdEncoding.EncodeToString(hash.Sum(nil))
-	return signature == expectedSignature
+
+	isValid := hmac.Equal([]byte(signature), []byte(expectedSignature))
+	if !isValid {
+		logError("署名検証失敗", nil, map[string]interface{}{
+			"received_signature": signature,
+			"expected_signature": expectedSignature,
+		})
+	}
+
+	return isValid
 }
 
 // HandleWebhook Webhookリクエストを処理
@@ -186,7 +204,6 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	errorCount := 0
 
 	for i, event := range events {
-		eventStartTime := time.Now()
 		if err := h.handleEvent(event, requestID); err != nil {
 			logError("イベント処理エラー", err, map[string]interface{}{
 				"request_id":  requestID,
@@ -198,14 +215,6 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		} else {
 			processedCount++
 		}
-
-		eventDuration := time.Since(eventStartTime).Milliseconds()
-		logDebug("イベント処理完了", map[string]interface{}{
-			"request_id":  requestID,
-			"event_index": i,
-			"event_type":  event.Type,
-			"duration_ms": eventDuration,
-		})
 	}
 
 	totalDuration := time.Since(startTime).Milliseconds()
@@ -231,6 +240,10 @@ func (h *Handler) handleEvent(event *linebot.Event, requestID string) error {
 	switch event.Type {
 	case linebot.EventTypeMessage:
 		return h.handleMessage(event, requestID)
+	case linebot.EventTypeFollow:
+		return h.handleFollow(event, requestID)
+	case linebot.EventTypeUnfollow:
+		return h.handleUnfollow(event, requestID)
 	default:
 		logDebug("未対応のイベントタイプ", map[string]interface{}{
 			"request_id": requestID,
@@ -250,12 +263,17 @@ func (h *Handler) handleMessage(event *linebot.Event, requestID string) error {
 	switch message := event.Message.(type) {
 	case *linebot.TextMessage:
 		return h.handleTextMessage(event, message, requestID)
+	case *linebot.ImageMessage:
+		return h.handleImageMessage(event, message, requestID)
+	case *linebot.StickerMessage:
+		return h.handleStickerMessage(event, message, requestID)
 	default:
 		logDebug("未対応のメッセージタイプ", map[string]interface{}{
 			"request_id":   requestID,
 			"message_type": fmt.Sprintf("%T", event.Message),
 		})
-		return nil
+		// 未対応のメッセージタイプにはヘルプメッセージを返信
+		return h.sendHelpMessage(event, requestID)
 	}
 }
 
@@ -307,10 +325,52 @@ func (h *Handler) handleTextMessage(event *linebot.Event, message *linebot.TextM
 			"user_id":    event.Source.UserID,
 			"command":    text,
 		})
-		replyMessage = "エラーが発生しました: " + err.Error()
+		replyMessage = fmt.Sprintf("エラーが発生しました: %v\n\n「ヘルプ」と送信すると利用可能なコマンドが表示されます。", err.Error())
 	}
 
-	_, err = h.bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(replyMessage)).Do()
+	return h.sendReplyMessage(event, replyMessage, requestID)
+}
+
+// handleImageMessage 画像メッセージを処理
+func (h *Handler) handleImageMessage(event *linebot.Event, message *linebot.ImageMessage, requestID string) error {
+	logInfo("画像メッセージ受信", map[string]interface{}{
+		"request_id": requestID,
+		"user_id":    event.Source.UserID,
+	})
+
+	replyMessage := "画像メッセージをありがとうございます！\n\nこのBotはテキストメッセージのみに対応しています。\n「ヘルプ」と送信すると利用可能なコマンドが表示されます。"
+
+	return h.sendReplyMessage(event, replyMessage, requestID)
+}
+
+// handleStickerMessage スタンプメッセージを処理
+func (h *Handler) handleStickerMessage(event *linebot.Event, message *linebot.StickerMessage, requestID string) error {
+	logInfo("スタンプメッセージ受信", map[string]interface{}{
+		"request_id": requestID,
+		"user_id":    event.Source.UserID,
+	})
+
+	replyMessage := "スタンプをありがとうございます！😊\n\n「ヘルプ」と送信すると利用可能なコマンドが表示されます。"
+
+	return h.sendReplyMessage(event, replyMessage, requestID)
+}
+
+// sendHelpMessage ヘルプメッセージを送信
+func (h *Handler) sendHelpMessage(event *linebot.Event, requestID string) error {
+	helpMessage := h.getHelpMessage()
+	return h.sendReplyMessage(event, helpMessage, requestID)
+}
+
+// sendReplyMessage 返信メッセージを送信
+func (h *Handler) sendReplyMessage(event *linebot.Event, message string, requestID string) error {
+	logInfo("LINE返信メッセージ送信開始", map[string]interface{}{
+		"request_id":  requestID,
+		"user_id":     event.Source.UserID,
+		"reply_token": event.ReplyToken,
+		"message":     message,
+	})
+
+	_, err := h.bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(message)).Do()
 	if err != nil {
 		logError("LINE返信メッセージ送信失敗", err, map[string]interface{}{
 			"request_id":  requestID,
@@ -323,9 +383,47 @@ func (h *Handler) handleTextMessage(event *linebot.Event, message *linebot.TextM
 	logInfo("LINE返信メッセージ送信完了", map[string]interface{}{
 		"request_id":   requestID,
 		"user_id":      event.Source.UserID,
-		"reply_length": len(replyMessage),
+		"reply_length": len(message),
 	})
 
+	return nil
+}
+
+// handleFollow フォローイベントを処理
+func (h *Handler) handleFollow(event *linebot.Event, requestID string) error {
+	logInfo("フォローイベント受信", map[string]interface{}{
+		"request_id": requestID,
+		"user_id":    event.Source.UserID,
+	})
+
+	welcomeMessage := `🤖 Coincheck LINE Botへようこそ！
+
+このBotでは以下の機能をご利用いただけます：
+
+• 残高 / balance / 残高確認
+  → 口座残高を表示
+
+• 資産 / assets / 資産確認
+  → 保有暗号通貨の一覧を表示
+
+• ヘルプ / help / ?
+  → ヘルプを表示
+
+毎週土曜日朝6時に自動で残高情報が送信されます。
+
+何かご不明な点がございましたら「ヘルプ」と送信してください。`
+
+	return h.sendReplyMessage(event, welcomeMessage, requestID)
+}
+
+// handleUnfollow アンフォローイベントを処理
+func (h *Handler) handleUnfollow(event *linebot.Event, requestID string) error {
+	logInfo("アンフォローイベント受信", map[string]interface{}{
+		"request_id": requestID,
+		"user_id":    event.Source.UserID,
+	})
+
+	// アンフォローイベントには返信できないため、ログのみ出力
 	return nil
 }
 
@@ -400,4 +498,30 @@ func (h *Handler) GetBalance() (*coincheck.BalanceResponse, error) {
 // FormatBalanceMessage 残高メッセージをフォーマット（定期実行用）
 func (h *Handler) FormatBalanceMessage(balance *coincheck.BalanceResponse) string {
 	return h.coincheck.FormatBalanceMessage(balance)
+}
+
+// VerifyWebhookConnection Webhook接続を確認
+func (h *Handler) VerifyWebhookConnection() error {
+	logInfo("Webhook接続確認開始", nil)
+
+	// LINE Bot SDKのクライアントが正常に初期化されているか確認
+	if h.bot == nil {
+		err := fmt.Errorf("LINE Bot client is not initialized")
+		logError("LINE Bot未初期化", err, nil)
+		return err
+	}
+
+	// チャネルシークレットが設定されているか確認
+	if h.channelSecret == "" {
+		err := fmt.Errorf("channel secret is not set")
+		logError("チャネルシークレット未設定", err, nil)
+		return err
+	}
+
+	logInfo("Webhook接続確認完了", map[string]interface{}{
+		"channel_secret_set": h.channelSecret != "",
+		"bot_initialized":    h.bot != nil,
+	})
+
+	return nil
 }

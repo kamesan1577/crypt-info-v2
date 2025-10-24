@@ -262,6 +262,12 @@ func (c *Client) GetBalance() (*BalanceResponse, error) {
 		return nil, fmt.Errorf("JSON解析失敗: %v", err)
 	}
 
+	// デバッグ: 実際のAPIレスポンスをログ出力
+	logDebug("Coincheck APIレスポンス詳細", map[string]interface{}{
+		"raw_response": string(body),
+		"success":      balance.Success,
+	})
+
 	if !balance.Success {
 		logError("API呼び出し失敗", nil, map[string]interface{}{
 			"response_body": string(body),
@@ -272,6 +278,12 @@ func (c *Client) GetBalance() (*BalanceResponse, error) {
 	logInfo("残高取得完了", map[string]interface{}{
 		"jpy_balance": balance.Data.JPY,
 		"btc_balance": balance.Data.BTC,
+		"eth_balance": balance.Data.ETH,
+		"raw_data": map[string]interface{}{
+			"jpy": balance.Data.JPY,
+			"btc": balance.Data.BTC,
+			"eth": balance.Data.ETH,
+		},
 	})
 
 	return &balance, nil
@@ -333,8 +345,12 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	message := "💰 Coincheck 口座残高\n\n"
 
 	// JPY残高
-	if balance.Data.JPY != "0" {
-		message += fmt.Sprintf("💴 JPY: %s円\n", balance.Data.JPY)
+	jpyBalance := strings.TrimSpace(balance.Data.JPY)
+	if jpyBalance != "" && jpyBalance != "0" {
+		message += fmt.Sprintf("💴 JPY: %s円\n", jpyBalance)
+	} else if jpyBalance == "" {
+		// 空文字列の場合は0として扱う
+		message += "💴 JPY: 0円\n"
 	}
 
 	// 暗号通貨残高（0以外のみ表示）
@@ -393,13 +409,25 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 		"HBAR":  balance.Data.HBAR,
 	}
 
+	hasCryptoBalance := false
 	for symbol, amount := range cryptoAssets {
-		if amount != "0" && amount != "" {
-			message += fmt.Sprintf("🪙 %s: %s\n", symbol, amount)
+		trimmedAmount := strings.TrimSpace(amount)
+		if trimmedAmount != "" && trimmedAmount != "0" {
+			message += fmt.Sprintf("🪙 %s: %s\n", symbol, trimmedAmount)
+			hasCryptoBalance = true
 		}
 	}
 
-	message += "\n📅 " + time.Now().Format("2006年1月2日 15:04")
+	// 残高がすべて0または空の場合の処理を改善
+	if jpyBalance == "" || jpyBalance == "0" {
+		if !hasCryptoBalance {
+			message += "\n📊 現在の残高: 0円"
+		}
+	}
+
+	// 日本時間で表示
+	jst := time.FixedZone("JST", 9*60*60)
+	message += "\n📅 " + time.Now().In(jst).Format("2006年1月2日 15:04 JST")
 
 	return message
 }

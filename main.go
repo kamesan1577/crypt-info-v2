@@ -31,9 +31,10 @@ func main() {
 	}
 
 	log.Printf("サーバーを起動中... ポート: %s", port)
-	log.Printf("LINE Webhook URL: http://localhost:%s/api", port)
+	log.Printf("LINE Webhook URL: http://localhost:%s/api/webhook", port)
 	log.Printf("定期実行テスト URL: http://localhost:%s/api/cron", port)
 	log.Printf("ヘルスチェック URL: http://localhost:%s/api/health", port)
+	log.Printf("API ルート URL: http://localhost:%s/api", port)
 
 	http.HandleFunc("/api", api.Handler)
 	http.HandleFunc("/api/", api.Handler)
