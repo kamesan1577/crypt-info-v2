@@ -352,7 +352,8 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 		if parsed, err := strconv.ParseFloat(jpyBalance, 64); err == nil {
 			jpyAmount = parsed
 		}
-		message += fmt.Sprintf("💴 JPY: %s円\n", formatNumberWithCommas(jpyBalance))
+		// JPYは整数で表示
+		message += fmt.Sprintf("💴 JPY: %s円\n", formatNumberWithCommas(fmt.Sprintf("%.0f", jpyAmount)))
 	}
 
 	// 暗号通貨残高（0以外のみ表示）
@@ -522,10 +523,15 @@ func formatNumberWithCommas(numStr string) string {
 
 	// カンマを追加
 	if len(integerPart) <= 3 {
+		result := integerPart
 		if isNegative {
-			return "-" + integerPart
+			result = "-" + result
 		}
-		return integerPart
+		// 小数点部分を追加
+		if len(parts) > 1 {
+			result += "." + parts[1]
+		}
+		return result
 	}
 
 	var result strings.Builder
