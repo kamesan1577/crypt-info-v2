@@ -7,11 +7,65 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// LogEntry Coincheckログエントリ
+type LogEntry struct {
+	Level     string                 `json:"level"`
+	Timestamp string                 `json:"timestamp"`
+	Message   string                 `json:"message"`
+	RequestID string                 `json:"request_id,omitempty"`
+	Method    string                 `json:"method,omitempty"`
+	URL       string                 `json:"url,omitempty"`
+	Status    int                    `json:"status,omitempty"`
+	Duration  int64                  `json:"duration_ms,omitempty"`
+	Error     string                 `json:"error,omitempty"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+}
+
+// logMessage Coincheck構造化ログを出力
+func logMessage(level, message string, data map[string]interface{}) {
+	entry := LogEntry{
+		Level:     level,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Message:   message,
+		Data:      data,
+	}
+
+	logJSON, err := json.Marshal(entry)
+	if err != nil {
+		log.Printf("Coincheckログ出力エラー: %v", err)
+		return
+	}
+
+	log.Printf("%s", string(logJSON))
+}
+
+// logError Coincheckエラーログを出力
+func logError(message string, err error, data map[string]interface{}) {
+	if data == nil {
+		data = make(map[string]interface{})
+	}
+	if err != nil {
+		data["error"] = err.Error()
+	}
+	logMessage("ERROR", message, data)
+}
+
+// logInfo Coincheck情報ログを出力
+func logInfo(message string, data map[string]interface{}) {
+	logMessage("INFO", message, data)
+}
+
+// logDebug Coincheckデバッグログを出力
+func logDebug(message string, data map[string]interface{}) {
+	logMessage("DEBUG", message, data)
+}
 
 // Client Coincheck API クライアント
 type Client struct {
@@ -110,11 +164,25 @@ func (c *Client) createSignature(nonce, url, body string) string {
 
 // makeRequest 認証付きリクエストを実行
 func (c *Client) makeRequest(method, endpoint, body string) (*http.Response, error) {
+	startTime := time.Now()
+	requestID := fmt.Sprintf("coincheck_%d", time.Now().UnixNano())
 	url := c.BaseURL + endpoint
 	nonce := strconv.FormatInt(time.Now().Unix(), 10)
 
+	logDebug("Coincheck APIリクエスト開始", map[string]interface{}{
+		"request_id": requestID,
+		"method":     method,
+		"url":        url,
+		"nonce":      nonce,
+	})
+
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
+		logError("HTTPリクエスト作成失敗", err, map[string]interface{}{
+			"request_id": requestID,
+			"method":     method,
+			"url":        url,
+		})
 		return nil, err
 	}
 
@@ -129,62 +197,133 @@ func (c *Client) makeRequest(method, endpoint, body string) (*http.Response, err
 	req.Header.Set("ACCESS-NONCE", nonce)
 	req.Header.Set("ACCESS-SIGNATURE", signature)
 
+	logDebug("Coincheck API認証ヘッダー設定", map[string]interface{}{
+		"request_id": requestID,
+		"access_key": c.APIKey,
+		"nonce":      nonce,
+		"signature":  signature,
+	})
+
 	client := &http.Client{Timeout: 30 * time.Second}
-	return client.Do(req)
+	resp, err := client.Do(req)
+
+	duration := time.Since(startTime).Milliseconds()
+
+	if err != nil {
+		logError("Coincheck APIリクエスト失敗", err, map[string]interface{}{
+			"request_id":  requestID,
+			"method":      method,
+			"url":         url,
+			"duration_ms": duration,
+		})
+		return nil, err
+	}
+
+	logInfo("Coincheck APIリクエスト完了", map[string]interface{}{
+		"request_id":  requestID,
+		"method":      method,
+		"url":         url,
+		"status":      resp.StatusCode,
+		"duration_ms": duration,
+	})
+
+	return resp, nil
 }
 
 // GetBalance 口座残高を取得
 func (c *Client) GetBalance() (*BalanceResponse, error) {
+	logInfo("残高取得リクエスト開始", nil)
+
 	resp, err := c.makeRequest("GET", "/api/accounts/balance", "")
 	if err != nil {
+		logError("残高取得リクエスト失敗", err, nil)
 		return nil, fmt.Errorf("残高取得リクエスト失敗: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logError("残高取得失敗", nil, map[string]interface{}{
+			"status_code": resp.StatusCode,
+		})
 		return nil, fmt.Errorf("残高取得失敗: status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logError("レスポンス読み込み失敗", err, nil)
 		return nil, fmt.Errorf("レスポンス読み込み失敗: %v", err)
 	}
 
 	var balance BalanceResponse
 	if err := json.Unmarshal(body, &balance); err != nil {
+		logError("JSON解析失敗", err, map[string]interface{}{
+			"body_size": len(body),
+		})
 		return nil, fmt.Errorf("JSON解析失敗: %v", err)
 	}
 
 	if !balance.Success {
+		logError("API呼び出し失敗", nil, map[string]interface{}{
+			"response_body": string(body),
+		})
 		return nil, fmt.Errorf("API呼び出し失敗")
 	}
+
+	logInfo("残高取得完了", map[string]interface{}{
+		"jpy_balance": balance.Data.JPY,
+		"btc_balance": balance.Data.BTC,
+	})
 
 	return &balance, nil
 }
 
 // GetTicker 指定通貨の価格情報を取得
 func (c *Client) GetTicker(pair string) (*TickerResponse, error) {
+	logInfo("価格情報取得リクエスト開始", map[string]interface{}{
+		"pair": pair,
+	})
+
 	url := fmt.Sprintf("%s/api/ticker?pair=%s", c.BaseURL, pair)
 
 	resp, err := http.Get(url)
 	if err != nil {
+		logError("価格取得リクエスト失敗", err, map[string]interface{}{
+			"pair": pair,
+			"url":  url,
+		})
 		return nil, fmt.Errorf("価格取得リクエスト失敗: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logError("価格取得失敗", nil, map[string]interface{}{
+			"pair":        pair,
+			"status_code": resp.StatusCode,
+		})
 		return nil, fmt.Errorf("価格取得失敗: status %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logError("レスポンス読み込み失敗", err, map[string]interface{}{
+			"pair": pair,
+		})
 		return nil, fmt.Errorf("レスポンス読み込み失敗: %v", err)
 	}
 
 	var ticker TickerResponse
 	if err := json.Unmarshal(body, &ticker); err != nil {
+		logError("JSON解析失敗", err, map[string]interface{}{
+			"pair":      pair,
+			"body_size": len(body),
+		})
 		return nil, fmt.Errorf("JSON解析失敗: %v", err)
 	}
+
+	logInfo("価格情報取得完了", map[string]interface{}{
+		"pair": pair,
+		"last": ticker.Last,
+	})
 
 	return &ticker, nil
 }
