@@ -17,7 +17,6 @@ func main() {
 		"COINCHECK_API_KEY",
 		"COINCHECK_API_SECRET",
 		"LINE_USER_ID",
-		"CRON_SECRET",
 	}
 
 	for _, envVar := range requiredEnvVars {

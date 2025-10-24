@@ -45,21 +45,15 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 // handleCron 定期実行ハンドラー
 func handleCron(w http.ResponseWriter, r *http.Request) {
-	// 認証チェック
-	cronSecret := os.Getenv("CRON_SECRET")
-	if cronSecret == "" {
-		http.Error(w, "CRON_SECRET not configured", http.StatusInternalServerError)
-		return
-	}
-
-	authHeader := r.Header.Get("Authorization")
-	if authHeader != "Bearer "+cronSecret {
+	// Vercel Cron Jobsの認証チェック
+	userAgent := r.Header.Get("User-Agent")
+	if userAgent != "vercel-cron/1.0" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// メソッドチェック
-	if r.Method != "POST" {
+	// メソッドチェック（Vercel Cron JobsはGETリクエストを送信）
+	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}

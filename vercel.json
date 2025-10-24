@@ -3,5 +3,11 @@
         "env": {
             "GO_BUILD_FLAGS": "-ldflags '-s -w'"
         }
-    }
+    },
+    "crons": [
+        {
+            "path": "/api/cron",
+            "schedule": "0 6 * * 6"
+        }
+    ]
 }
