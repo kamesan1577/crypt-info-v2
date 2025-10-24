@@ -77,7 +77,61 @@ type Client struct {
 // BalanceResponse 残高レスポンス
 type BalanceResponse struct {
 	Success bool                   `json:"success"`
-	Data    map[string]interface{} `json:"data"`
+	Data    map[string]interface{} `json:"data,omitempty"`
+	// 直接フィールドとしても残高データを保持
+	JPY   string `json:"jpy,omitempty"`
+	BTC   string `json:"btc,omitempty"`
+	ETH   string `json:"eth,omitempty"`
+	ETC   string `json:"etc,omitempty"`
+	LSK   string `json:"lsk,omitempty"`
+	FCT   string `json:"fct,omitempty"`
+	XRP   string `json:"xrp,omitempty"`
+	XEM   string `json:"xem,omitempty"`
+	LTC   string `json:"ltc,omitempty"`
+	BCH   string `json:"bch,omitempty"`
+	MONA  string `json:"mona,omitempty"`
+	XLM   string `json:"xlm,omitempty"`
+	QTUM  string `json:"qtum,omitempty"`
+	DASH  string `json:"dash,omitempty"`
+	ZEC   string `json:"zec,omitempty"`
+	BAT   string `json:"bat,omitempty"`
+	IOST  string `json:"iost,omitempty"`
+	ENJ   string `json:"enj,omitempty"`
+	OMG   string `json:"omg,omitempty"`
+	PLT   string `json:"plt,omitempty"`
+	XTZ   string `json:"xtz,omitempty"`
+	ATOM  string `json:"atom,omitempty"`
+	MKR   string `json:"mkr,omitempty"`
+	LINK  string `json:"link,omitempty"`
+	COMP  string `json:"comp,omitempty"`
+	YFI   string `json:"yfi,omitempty"`
+	UNI   string `json:"uni,omitempty"`
+	AAVE  string `json:"aave,omitempty"`
+	SNX   string `json:"snx,omitempty"`
+	CRV   string `json:"crv,omitempty"`
+	MATIC string `json:"matic,omitempty"`
+	SOL   string `json:"sol,omitempty"`
+	AVAX  string `json:"avax,omitempty"`
+	DOT   string `json:"dot,omitempty"`
+	ADA   string `json:"ada,omitempty"`
+	SHIB  string `json:"shib,omitempty"`
+	DOGE  string `json:"doge,omitempty"`
+	TRX   string `json:"trx,omitempty"`
+	NEAR  string `json:"near,omitempty"`
+	FTM   string `json:"ftm,omitempty"`
+	ALGO  string `json:"algo,omitempty"`
+	MANA  string `json:"mana,omitempty"`
+	SAND  string `json:"sand,omitempty"`
+	AXS   string `json:"axs,omitempty"`
+	CHZ   string `json:"chz,omitempty"`
+	FLOW  string `json:"flow,omitempty"`
+	ICP   string `json:"icp,omitempty"`
+	VET   string `json:"vet,omitempty"`
+	FIL   string `json:"fil,omitempty"`
+	THETA string `json:"theta,omitempty"`
+	EOS   string `json:"eos,omitempty"`
+	KLAY  string `json:"klay,omitempty"`
+	HBAR  string `json:"hbar,omitempty"`
 }
 
 // TickerResponse ティッカーレスポンス（価格情報）
@@ -222,35 +276,14 @@ func (c *Client) GetBalance() (*BalanceResponse, error) {
 		return nil, fmt.Errorf("API呼び出し失敗")
 	}
 
-	// 主要な残高を取得
-	jpyBalance := ""
-	btcBalance := ""
-	ethBalance := ""
-
-	if jpyVal, exists := balance.Data["jpy"]; exists {
-		if jpyStr, ok := jpyVal.(string); ok {
-			jpyBalance = jpyStr
-		}
-	}
-	if btcVal, exists := balance.Data["btc"]; exists {
-		if btcStr, ok := btcVal.(string); ok {
-			btcBalance = btcStr
-		}
-	}
-	if ethVal, exists := balance.Data["eth"]; exists {
-		if ethStr, ok := ethVal.(string); ok {
-			ethBalance = ethStr
-		}
-	}
-
 	logInfo("残高取得完了", map[string]interface{}{
-		"jpy_balance": jpyBalance,
-		"btc_balance": btcBalance,
-		"eth_balance": ethBalance,
+		"jpy_balance": balance.JPY,
+		"btc_balance": balance.BTC,
+		"eth_balance": balance.ETH,
 		"raw_data": map[string]interface{}{
-			"jpy": jpyBalance,
-			"btc": btcBalance,
-			"eth": ethBalance,
+			"jpy": balance.JPY,
+			"btc": balance.BTC,
+			"eth": balance.ETH,
 		},
 	})
 
@@ -313,12 +346,7 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	message := "💰 Coincheck 口座残高\n\n"
 
 	// JPY残高を取得
-	jpyBalance := ""
-	if jpyVal, exists := balance.Data["jpy"]; exists {
-		if jpyStr, ok := jpyVal.(string); ok {
-			jpyBalance = strings.TrimSpace(jpyStr)
-		}
-	}
+	jpyBalance := strings.TrimSpace(balance.JPY)
 
 	if jpyBalance != "" && jpyBalance != "0" {
 		message += fmt.Sprintf("💴 JPY: %s円\n", jpyBalance)
@@ -328,25 +356,67 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	}
 
 	// 暗号通貨残高（0以外のみ表示）
-	cryptoAssets := []string{
-		"btc", "eth", "etc", "lsk", "fct", "xrp", "xem", "ltc", "bch", "mona",
-		"xlm", "qtum", "dash", "zec", "bat", "iost", "enj", "omg", "plt", "xtz",
-		"atom", "mkr", "link", "comp", "yfi", "uni", "aave", "snx", "crv", "matic",
-		"sol", "avax", "dot", "ada", "shib", "doge", "trx", "near", "ftm", "algo",
-		"mana", "sand", "axs", "chz", "flow", "icp", "vet", "fil", "theta", "eos",
-		"klay", "hbar",
+	cryptoAssets := map[string]string{
+		"BTC":   balance.BTC,
+		"ETH":   balance.ETH,
+		"ETC":   balance.ETC,
+		"LSK":   balance.LSK,
+		"FCT":   balance.FCT,
+		"XRP":   balance.XRP,
+		"XEM":   balance.XEM,
+		"LTC":   balance.LTC,
+		"BCH":   balance.BCH,
+		"MONA":  balance.MONA,
+		"XLM":   balance.XLM,
+		"QTUM":  balance.QTUM,
+		"DASH":  balance.DASH,
+		"ZEC":   balance.ZEC,
+		"BAT":   balance.BAT,
+		"IOST":  balance.IOST,
+		"ENJ":   balance.ENJ,
+		"OMG":   balance.OMG,
+		"PLT":   balance.PLT,
+		"XTZ":   balance.XTZ,
+		"ATOM":  balance.ATOM,
+		"MKR":   balance.MKR,
+		"LINK":  balance.LINK,
+		"COMP":  balance.COMP,
+		"YFI":   balance.YFI,
+		"UNI":   balance.UNI,
+		"AAVE":  balance.AAVE,
+		"SNX":   balance.SNX,
+		"CRV":   balance.CRV,
+		"MATIC": balance.MATIC,
+		"SOL":   balance.SOL,
+		"AVAX":  balance.AVAX,
+		"DOT":   balance.DOT,
+		"ADA":   balance.ADA,
+		"SHIB":  balance.SHIB,
+		"DOGE":  balance.DOGE,
+		"TRX":   balance.TRX,
+		"NEAR":  balance.NEAR,
+		"FTM":   balance.FTM,
+		"ALGO":  balance.ALGO,
+		"MANA":  balance.MANA,
+		"SAND":  balance.SAND,
+		"AXS":   balance.AXS,
+		"CHZ":   balance.CHZ,
+		"FLOW":  balance.FLOW,
+		"ICP":   balance.ICP,
+		"VET":   balance.VET,
+		"FIL":   balance.FIL,
+		"THETA": balance.THETA,
+		"EOS":   balance.EOS,
+		"KLAY":  balance.KLAY,
+		"HBAR":  balance.HBAR,
 	}
 
 	hasCryptoBalance := false
-	for _, symbol := range cryptoAssets {
-		if val, exists := balance.Data[symbol]; exists {
-			if amountStr, ok := val.(string); ok {
-				trimmedAmount := strings.TrimSpace(amountStr)
-				if trimmedAmount != "" && trimmedAmount != "0" {
-					message += fmt.Sprintf("🪙 %s: %s\n", strings.ToUpper(symbol), trimmedAmount)
-					hasCryptoBalance = true
-				}
-			}
+	for symbol, amount := range cryptoAssets {
+		trimmedAmount := strings.TrimSpace(amount)
+		if trimmedAmount != "" && trimmedAmount != "0" {
+			message += fmt.Sprintf("🪙 %s: %s\n", symbol, trimmedAmount)
+			hasCryptoBalance = true
 		}
 	}
 

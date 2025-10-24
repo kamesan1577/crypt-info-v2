@@ -221,25 +221,10 @@ func executeScheduledTask(requestID string) error {
 		return fmt.Errorf("failed to get balance: %v", err)
 	}
 
-	// 主要な残高を取得
-	jpyBalance := ""
-	btcBalance := ""
-
-	if jpyVal, exists := balance.Data["jpy"]; exists {
-		if jpyStr, ok := jpyVal.(string); ok {
-			jpyBalance = jpyStr
-		}
-	}
-	if btcVal, exists := balance.Data["btc"]; exists {
-		if btcStr, ok := btcVal.(string); ok {
-			btcBalance = btcStr
-		}
-	}
-
 	logInfo("残高情報取得完了", map[string]interface{}{
 		"request_id":  requestID,
-		"jpy_balance": jpyBalance,
-		"btc_balance": btcBalance,
+		"jpy_balance": balance.JPY,
+		"btc_balance": balance.BTC,
 	})
 
 	// メッセージをフォーマット
