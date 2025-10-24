@@ -1,3 +1,4 @@
+// ローカル開発用のメインファイル
 package main
 
 import (
@@ -6,8 +7,6 @@ import (
 	"os"
 
 	"crypt-info-v2/api"
-	"crypt-info-v2/api/cron"
-	"crypt-info-v2/api/health"
 )
 
 func main() {
@@ -36,30 +35,8 @@ func main() {
 	log.Printf("定期実行テスト URL: http://localhost:%s/api/cron", port)
 	log.Printf("ヘルスチェック URL: http://localhost:%s/api/health", port)
 
-	// ローカル開発用の統合ハンドラー
-	http.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			api.POST(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	http.HandleFunc("/api/cron", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			cron.GET(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			health.GET(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	http.HandleFunc("/api", api.Handler)
+	http.HandleFunc("/api/", api.Handler)
 
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

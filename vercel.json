@@ -4,17 +4,39 @@
             "GO_BUILD_FLAGS": "-ldflags '-s -w'"
         }
     },
-    "functions": {
-        "api/index.go": {
-            "runtime": "go1.x"
+    "rewrites": [
+        {
+            "source": "/api",
+            "destination": "/api"
         },
-        "api/cron/cron.go": {
-            "runtime": "go1.x"
+        {
+            "source": "/api/cron",
+            "destination": "/api"
         },
-        "api/health/health.go": {
-            "runtime": "go1.x"
+        {
+            "source": "/api/health",
+            "destination": "/api"
         }
-    },
+    ],
+    "headers": [
+        {
+            "source": "/api/(.*)",
+            "headers": [
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "*"
+                },
+                {
+                    "key": "Access-Control-Allow-Methods",
+                    "value": "GET, POST, OPTIONS"
+                },
+                {
+                    "key": "Access-Control-Allow-Headers",
+                    "value": "Content-Type, Authorization, X-Line-Signature"
+                }
+            ]
+        }
+    ],
     "crons": [
         {
             "path": "/api/cron",
