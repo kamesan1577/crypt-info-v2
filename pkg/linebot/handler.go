@@ -294,6 +294,14 @@ func (h *Handler) handleTextMessage(event *linebot.Event, message *linebot.TextM
 			"user_id":    event.Source.UserID,
 		})
 		replyMessage, err = h.getAssetsMessage()
+	case text == "id" || text == "ID" || text == "id確認":
+		logInfo("ID確認コマンド実行", map[string]interface{}{
+			"request_id": requestID,
+			"user_id":    event.Source.UserID,
+			"group_id":   event.Source.GroupID,
+			"room_id":    event.Source.RoomID,
+		})
+		replyMessage = h.getIDInfo(event)
 	case text == "ヘルプ" || text == "help" || text == "?":
 		logInfo("ヘルプコマンド実行", map[string]interface{}{
 			"request_id": requestID,
@@ -440,6 +448,38 @@ func (h *Handler) getAssetsMessage() (string, error) {
 	return h.getBalanceMessage()
 }
 
+// getIDInfo ID情報を取得
+func (h *Handler) getIDInfo(event *linebot.Event) string {
+	logDebug("ID情報生成", map[string]interface{}{
+		"user_id":  event.Source.UserID,
+		"group_id": event.Source.GroupID,
+		"room_id":  event.Source.RoomID,
+	})
+
+	var info strings.Builder
+	info.WriteString("🔍 ID情報\n\n")
+
+	if event.Source.UserID != "" {
+		info.WriteString(fmt.Sprintf("👤 ユーザーID: %s\n", event.Source.UserID))
+	}
+
+	if event.Source.GroupID != "" {
+		info.WriteString(fmt.Sprintf("👥 グループID: %s\n", event.Source.GroupID))
+	}
+
+	if event.Source.RoomID != "" {
+		info.WriteString(fmt.Sprintf("🏠 ルームID: %s\n", event.Source.RoomID))
+	}
+
+	if event.Source.UserID == "" && event.Source.GroupID == "" && event.Source.RoomID == "" {
+		info.WriteString("ID情報が取得できませんでした。")
+	}
+
+	info.WriteString("\n💡 定期実行でグループにメッセージを送るには、グループIDを環境変数LINE_GROUP_IDに設定してください。")
+
+	return info.String()
+}
+
 // getHelpMessage ヘルプメッセージを取得
 func (h *Handler) getHelpMessage() string {
 	logDebug("ヘルプメッセージ生成", nil)
@@ -451,6 +491,9 @@ func (h *Handler) getHelpMessage() string {
 
 • 資産 / assets / 資産確認
   → 保有暗号通貨の一覧を表示
+
+• id / ID / id確認
+  → ユーザーID、グループID、ルームIDを表示
 
 • ヘルプ / help / ?
   → このヘルプを表示
