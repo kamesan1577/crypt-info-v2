@@ -1,4 +1,4 @@
-package api
+package linebot
 
 import (
 	"crypto/hmac"
@@ -10,18 +10,20 @@ import (
 	"os"
 	"strings"
 
+	"crypt-info-v2/internal/coincheck"
+
 	"github.com/line/line-bot-sdk-go/v8/linebot"
 )
 
-// LineBotHandler LINE Bot処理ハンドラー
-type LineBotHandler struct {
+// Handler LINE Bot処理ハンドラー
+type Handler struct {
 	bot           *linebot.Client
-	coincheck     *CoincheckClient
+	coincheck     *coincheck.Client
 	channelSecret string
 }
 
-// NewLineBotHandler 新しいLINE Botハンドラーを作成
-func NewLineBotHandler() (*LineBotHandler, error) {
+// NewHandler 新しいLINE Botハンドラーを作成
+func NewHandler() (*Handler, error) {
 	channelSecret := os.Getenv("LINE_CHANNEL_SECRET")
 	channelToken := os.Getenv("LINE_CHANNEL_ACCESS_TOKEN")
 	coincheckAPIKey := os.Getenv("COINCHECK_API_KEY")
@@ -40,17 +42,17 @@ func NewLineBotHandler() (*LineBotHandler, error) {
 		return nil, fmt.Errorf("LINE Bot初期化失敗: %v", err)
 	}
 
-	coincheck := NewCoincheckClient(coincheckAPIKey, coincheckAPISecret)
+	coincheckClient := coincheck.NewClient(coincheckAPIKey, coincheckAPISecret)
 
-	return &LineBotHandler{
+	return &Handler{
 		bot:           bot,
-		coincheck:     coincheck,
+		coincheck:     coincheckClient,
 		channelSecret: channelSecret,
 	}, nil
 }
 
 // VerifySignature 署名を検証
-func (h *LineBotHandler) VerifySignature(body []byte, signature string) bool {
+func (h *Handler) VerifySignature(body []byte, signature string) bool {
 	hash := hmac.New(sha256.New, []byte(h.channelSecret))
 	hash.Write(body)
 	expectedSignature := base64.StdEncoding.EncodeToString(hash.Sum(nil))
@@ -58,7 +60,7 @@ func (h *LineBotHandler) VerifySignature(body []byte, signature string) bool {
 }
 
 // HandleWebhook Webhookリクエストを処理
-func (h *LineBotHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "リクエストボディ読み込み失敗", http.StatusBadRequest)
@@ -87,7 +89,7 @@ func (h *LineBotHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleEvent イベントを処理
-func (h *LineBotHandler) handleEvent(event *linebot.Event) error {
+func (h *Handler) handleEvent(event *linebot.Event) error {
 	switch event.Type {
 	case linebot.EventTypeMessage:
 		return h.handleMessage(event)
@@ -97,7 +99,7 @@ func (h *LineBotHandler) handleEvent(event *linebot.Event) error {
 }
 
 // handleMessage メッセージイベントを処理
-func (h *LineBotHandler) handleMessage(event *linebot.Event) error {
+func (h *Handler) handleMessage(event *linebot.Event) error {
 	switch message := event.Message.(type) {
 	case *linebot.TextMessage:
 		return h.handleTextMessage(event, message)
@@ -107,7 +109,7 @@ func (h *LineBotHandler) handleMessage(event *linebot.Event) error {
 }
 
 // handleTextMessage テキストメッセージを処理
-func (h *LineBotHandler) handleTextMessage(event *linebot.Event, message *linebot.TextMessage) error {
+func (h *Handler) handleTextMessage(event *linebot.Event, message *linebot.TextMessage) error {
 	text := strings.TrimSpace(message.Text)
 
 	var replyMessage string
@@ -133,7 +135,7 @@ func (h *LineBotHandler) handleTextMessage(event *linebot.Event, message *linebo
 }
 
 // getBalanceMessage 残高メッセージを取得
-func (h *LineBotHandler) getBalanceMessage() (string, error) {
+func (h *Handler) getBalanceMessage() (string, error) {
 	balance, err := h.coincheck.GetBalance()
 	if err != nil {
 		return "", fmt.Errorf("残高取得失敗: %v", err)
@@ -143,12 +145,12 @@ func (h *LineBotHandler) getBalanceMessage() (string, error) {
 }
 
 // getAssetsMessage 資産メッセージを取得（残高と同じ）
-func (h *LineBotHandler) getAssetsMessage() (string, error) {
+func (h *Handler) getAssetsMessage() (string, error) {
 	return h.getBalanceMessage()
 }
 
 // getHelpMessage ヘルプメッセージを取得
-func (h *LineBotHandler) getHelpMessage() string {
+func (h *Handler) getHelpMessage() string {
 	return `🤖 Coincheck LINE Bot ヘルプ
 
 利用可能なコマンド:
@@ -165,7 +167,17 @@ func (h *LineBotHandler) getHelpMessage() string {
 }
 
 // SendPushMessage プッシュメッセージを送信（定期実行用）
-func (h *LineBotHandler) SendPushMessage(userID, message string) error {
+func (h *Handler) SendPushMessage(userID, message string) error {
 	_, err := h.bot.PushMessage(userID, linebot.NewTextMessage(message)).Do()
 	return err
+}
+
+// GetBalance 残高を取得（定期実行用）
+func (h *Handler) GetBalance() (*coincheck.BalanceResponse, error) {
+	return h.coincheck.GetBalance()
+}
+
+// FormatBalanceMessage 残高メッセージをフォーマット（定期実行用）
+func (h *Handler) FormatBalanceMessage(balance *coincheck.BalanceResponse) string {
+	return h.coincheck.FormatBalanceMessage(balance)
 }

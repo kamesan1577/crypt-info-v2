@@ -5,13 +5,15 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"crypt-info-v2/internal/linebot"
 )
 
-var lineBotHandler *LineBotHandler
+var lineBotHandler *linebot.Handler
 
 func init() {
 	var err error
-	lineBotHandler, err = NewLineBotHandler()
+	lineBotHandler, err = linebot.NewHandler()
 	if err != nil {
 		fmt.Printf("LINE Bot初期化エラー: %v\n", err)
 	}
@@ -79,17 +81,16 @@ func executeScheduledTask() error {
 	}
 
 	// 残高情報を取得
-	balance, err := lineBotHandler.coincheck.GetBalance()
+	balance, err := lineBotHandler.GetBalance()
 	if err != nil {
 		return fmt.Errorf("failed to get balance: %v", err)
 	}
 
 	// メッセージをフォーマット
-	message := lineBotHandler.coincheck.FormatBalanceMessage(balance)
+	message := lineBotHandler.FormatBalanceMessage(balance)
 	message = "📅 定期レポート\n\n" + message
 
-	// プッシュメッセージを送信（全ユーザーに送信する場合は、ユーザーIDリストが必要）
-	// 現在は単一ユーザーを想定
+	// プッシュメッセージを送信
 	userID := os.Getenv("LINE_USER_ID")
 	if userID == "" {
 		return fmt.Errorf("LINE_USER_ID not configured")

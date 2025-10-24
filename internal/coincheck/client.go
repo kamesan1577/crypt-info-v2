@@ -1,4 +1,4 @@
-package api
+package coincheck
 
 import (
 	"crypto/hmac"
@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-// CoincheckClient Coincheck API クライアント
-type CoincheckClient struct {
+// Client Coincheck API クライアント
+type Client struct {
 	APIKey    string
 	APISecret string
 	BaseURL   string
@@ -91,9 +91,9 @@ type TickerResponse struct {
 	Timestamp int64   `json:"timestamp"`
 }
 
-// NewCoincheckClient 新しいCoincheckクライアントを作成
-func NewCoincheckClient(apiKey, apiSecret string) *CoincheckClient {
-	return &CoincheckClient{
+// NewClient 新しいCoincheckクライアントを作成
+func NewClient(apiKey, apiSecret string) *Client {
+	return &Client{
 		APIKey:    apiKey,
 		APISecret: apiSecret,
 		BaseURL:   "https://coincheck.com",
@@ -101,7 +101,7 @@ func NewCoincheckClient(apiKey, apiSecret string) *CoincheckClient {
 }
 
 // createSignature HMAC-SHA256署名を作成
-func (c *CoincheckClient) createSignature(nonce, url, body string) string {
+func (c *Client) createSignature(nonce, url, body string) string {
 	message := nonce + url + body
 	h := hmac.New(sha256.New, []byte(c.APISecret))
 	h.Write([]byte(message))
@@ -109,7 +109,7 @@ func (c *CoincheckClient) createSignature(nonce, url, body string) string {
 }
 
 // makeRequest 認証付きリクエストを実行
-func (c *CoincheckClient) makeRequest(method, endpoint, body string) (*http.Response, error) {
+func (c *Client) makeRequest(method, endpoint, body string) (*http.Response, error) {
 	url := c.BaseURL + endpoint
 	nonce := strconv.FormatInt(time.Now().Unix(), 10)
 
@@ -134,7 +134,7 @@ func (c *CoincheckClient) makeRequest(method, endpoint, body string) (*http.Resp
 }
 
 // GetBalance 口座残高を取得
-func (c *CoincheckClient) GetBalance() (*BalanceResponse, error) {
+func (c *Client) GetBalance() (*BalanceResponse, error) {
 	resp, err := c.makeRequest("GET", "/api/accounts/balance", "")
 	if err != nil {
 		return nil, fmt.Errorf("残高取得リクエスト失敗: %v", err)
@@ -163,7 +163,7 @@ func (c *CoincheckClient) GetBalance() (*BalanceResponse, error) {
 }
 
 // GetTicker 指定通貨の価格情報を取得
-func (c *CoincheckClient) GetTicker(pair string) (*TickerResponse, error) {
+func (c *Client) GetTicker(pair string) (*TickerResponse, error) {
 	url := fmt.Sprintf("%s/api/ticker?pair=%s", c.BaseURL, pair)
 
 	resp, err := http.Get(url)
@@ -190,7 +190,7 @@ func (c *CoincheckClient) GetTicker(pair string) (*TickerResponse, error) {
 }
 
 // FormatBalanceMessage 残高情報をLINEメッセージ用にフォーマット
-func (c *CoincheckClient) FormatBalanceMessage(balance *BalanceResponse) string {
+func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	message := "💰 Coincheck 口座残高\n\n"
 
 	// JPY残高
