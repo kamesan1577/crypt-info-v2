@@ -1,12 +1,8 @@
 package linebot
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -128,32 +124,6 @@ func NewHandler() (*Handler, error) {
 	}, nil
 }
 
-// VerifySignature 署名を検証
-func (h *Handler) VerifySignature(body []byte, signature string) bool {
-	if signature == "" {
-		logError("署名が空です", nil, nil)
-		return false
-	}
-
-	// X-Line-Signatureヘッダーから署名を抽出（プレフィックスを除去）
-	signature = strings.TrimPrefix(signature, "sha256=")
-
-	// HMAC-SHA256で署名を生成
-	hash := hmac.New(sha256.New, []byte(h.channelSecret))
-	hash.Write(body)
-	expectedSignature := base64.StdEncoding.EncodeToString(hash.Sum(nil))
-
-	isValid := hmac.Equal([]byte(signature), []byte(expectedSignature))
-	if !isValid {
-		logError("署名検証失敗", nil, map[string]interface{}{
-			"received_signature": signature,
-			"expected_signature": expectedSignature,
-		})
-	}
-
-	return isValid
-}
-
 // HandleWebhook Webhookリクエストを処理
 func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -166,30 +136,50 @@ func (h *Handler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		"remote_addr": r.RemoteAddr,
 	})
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		logError("リクエストボディ読み込み失敗", err, map[string]interface{}{
+	// GETリクエストの場合は、LINE Botの設定確認やヘルスチェックとして処理
+	if r.Method == "GET" {
+		logInfo("GETリクエストをヘルスチェックとして処理", map[string]interface{}{
 			"request_id": requestID,
 		})
-		http.Error(w, "リクエストボディ読み込み失敗", http.StatusBadRequest)
+
+		// Webhook接続確認
+		if err := h.VerifyWebhookConnection(); err != nil {
+			logError("Webhook接続確認失敗", err, map[string]interface{}{
+				"request_id": requestID,
+			})
+			http.Error(w, "Webhook connection verification failed", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "LINE Bot Webhook is running")
+
+		totalDuration := time.Since(startTime).Milliseconds()
+		logInfo("Webhookヘルスチェック完了", map[string]interface{}{
+			"request_id":        requestID,
+			"total_duration_ms": totalDuration,
+		})
 		return
 	}
 
-	signature := r.Header.Get("X-Line-Signature")
-	if !h.VerifySignature(body, signature) {
-		logError("署名検証失敗", nil, map[string]interface{}{
+	// POSTリクエストの場合のみ署名検証を実行
+	if r.Method != "POST" {
+		logError("不正なHTTPメソッド", nil, map[string]interface{}{
 			"request_id": requestID,
-			"signature":  signature,
+			"method":     r.Method,
 		})
-		http.Error(w, "署名検証失敗", http.StatusUnauthorized)
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// LINE Bot SDKのParseRequestが内部で署名検証を行うため、
+	// 手動での署名検証は不要
 	events, err := h.bot.ParseRequest(r)
 	if err != nil {
 		logError("イベント解析失敗", err, map[string]interface{}{
-			"request_id": requestID,
-			"body_size":  len(body),
+			"request_id":   requestID,
+			"content_type": r.Header.Get("Content-Type"),
+			"signature":    r.Header.Get("X-Line-Signature"),
 		})
 		http.Error(w, "イベント解析失敗", http.StatusBadRequest)
 		return
