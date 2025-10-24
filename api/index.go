@@ -233,9 +233,40 @@ func executeScheduledTask(requestID string) error {
 
 	// プッシュメッセージを送信
 	userID := os.Getenv("LINE_USER_ID")
-	if userID == "" {
-		err := fmt.Errorf("LINE_USER_ID not configured")
-		logError("LINE_USER_ID未設定", err, map[string]interface{}{
+	groupID := os.Getenv("LINE_GROUP_ID")
+	multipleIDs := os.Getenv("LINE_MULTIPLE_IDS")
+
+	var sendTargets []string
+	var targetNames []string
+
+	// ユーザーIDが設定されている場合
+	if userID != "" {
+		sendTargets = append(sendTargets, userID)
+		targetNames = append(targetNames, "ユーザー")
+	}
+
+	// グループIDが設定されている場合
+	if groupID != "" {
+		sendTargets = append(sendTargets, groupID)
+		targetNames = append(targetNames, "グループ")
+	}
+
+	// 複数IDが設定されている場合（カンマ区切り）
+	if multipleIDs != "" {
+		ids := strings.Split(multipleIDs, ",")
+		for _, id := range ids {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				sendTargets = append(sendTargets, id)
+				targetNames = append(targetNames, "複数ID")
+			}
+		}
+	}
+
+	// 送信先が設定されていない場合
+	if len(sendTargets) == 0 {
+		err := fmt.Errorf("送信先が設定されていません（LINE_USER_ID、LINE_GROUP_ID、LINE_MULTIPLE_IDSのいずれかが必要）")
+		logError("送信先未設定", err, map[string]interface{}{
 			"request_id": requestID,
 		})
 		return err
@@ -243,21 +274,52 @@ func executeScheduledTask(requestID string) error {
 
 	logInfo("プッシュメッセージ送信開始", map[string]interface{}{
 		"request_id":     requestID,
-		"user_id":        userID,
+		"target_count":   len(sendTargets),
+		"target_names":   targetNames,
 		"message_length": len(message),
 	})
 
-	if err := lineBotHandler.SendPushMessage(userID, message); err != nil {
-		logError("プッシュメッセージ送信失敗", err, map[string]interface{}{
-			"request_id": requestID,
-			"user_id":    userID,
+	// 各送信先に個別にプッシュメッセージを送信
+	var errors []string
+	successCount := 0
+
+	for i, target := range sendTargets {
+		if err := lineBotHandler.SendPushMessage(target, message); err != nil {
+			logError("プッシュメッセージ送信失敗", err, map[string]interface{}{
+				"request_id":   requestID,
+				"target":       target,
+				"target_index": i,
+			})
+			errors = append(errors, fmt.Sprintf("target %s: %v", target, err))
+		} else {
+			successCount++
+			logInfo("プッシュメッセージ送信成功", map[string]interface{}{
+				"request_id":   requestID,
+				"target":       target,
+				"target_index": i,
+			})
+		}
+	}
+
+	// 全ての送信が失敗した場合はエラーを返す
+	if successCount == 0 {
+		return fmt.Errorf("全ての送信先への送信に失敗しました: %s", strings.Join(errors, "; "))
+	}
+
+	// 一部の送信が失敗した場合は警告ログを出力
+	if len(errors) > 0 {
+		logError("一部の送信先への送信に失敗", nil, map[string]interface{}{
+			"request_id":    requestID,
+			"success_count": successCount,
+			"error_count":   len(errors),
+			"errors":        errors,
 		})
-		return fmt.Errorf("failed to send push message: %v", err)
 	}
 
 	logInfo("定期実行タスク完了", map[string]interface{}{
-		"request_id": requestID,
-		"user_id":    userID,
+		"request_id":   requestID,
+		"target_count": len(sendTargets),
+		"target_names": targetNames,
 	})
 
 	return nil
