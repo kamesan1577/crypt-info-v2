@@ -506,18 +506,24 @@ func (h *Handler) SendPushMessage(userID, message string) error {
 	logInfo("プッシュメッセージ送信開始", map[string]interface{}{
 		"user_id":        userID,
 		"message_length": len(message),
+		"user_id_length": len(userID),
 	})
 
+	// LINE Bot SDKのPushMessageを実行
 	_, err := h.bot.PushMessage(userID, linebot.NewTextMessage(message)).Do()
 	if err != nil {
 		logError("プッシュメッセージ送信失敗", err, map[string]interface{}{
-			"user_id": userID,
+			"user_id":        userID,
+			"user_id_length": len(userID),
+			"message_length": len(message),
 		})
 		return err
 	}
 
 	logInfo("プッシュメッセージ送信完了", map[string]interface{}{
-		"user_id": userID,
+		"user_id":        userID,
+		"user_id_length": len(userID),
+		"message_length": len(message),
 	})
 
 	return nil

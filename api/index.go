@@ -236,38 +236,123 @@ func executeScheduledTask(requestID string) error {
 	groupID := os.Getenv("LINE_GROUP_ID")
 	multipleIDs := os.Getenv("LINE_MULTIPLE_IDS")
 
+	logInfo("環境変数設定状況確認", map[string]interface{}{
+		"request_id":          requestID,
+		"user_id_set":         userID != "",
+		"group_id_set":        groupID != "",
+		"multiple_ids_set":    multipleIDs != "",
+		"user_id_length":      len(userID),
+		"group_id_length":     len(groupID),
+		"multiple_ids_length": len(multipleIDs),
+	})
+
 	var sendTargets []string
 	var targetNames []string
 
 	// ユーザーIDが設定されている場合
 	if userID != "" {
-		sendTargets = append(sendTargets, userID)
-		targetNames = append(targetNames, "ユーザー")
+		// ユーザーIDの形式を検証（Uで始まる33文字の文字列）
+		if len(userID) == 33 && strings.HasPrefix(userID, "U") {
+			sendTargets = append(sendTargets, userID)
+			targetNames = append(targetNames, "ユーザー")
+			logInfo("ユーザーID追加", map[string]interface{}{
+				"request_id":   requestID,
+				"user_id":      userID,
+				"valid_format": true,
+			})
+		} else {
+			logError("ユーザーID形式が無効", nil, map[string]interface{}{
+				"request_id": requestID,
+				"user_id":    userID,
+				"length":     len(userID),
+				"prefix": func() string {
+					if len(userID) > 0 {
+						return userID[:1]
+					} else {
+						return ""
+					}
+				}(),
+				"expected_format": "Uで始まる33文字の文字列",
+			})
+		}
 	}
 
 	// グループIDが設定されている場合
 	if groupID != "" {
-		sendTargets = append(sendTargets, groupID)
-		targetNames = append(targetNames, "グループ")
+		// グループIDの形式を検証（Cで始まる33文字の文字列）
+		if len(groupID) == 33 && strings.HasPrefix(groupID, "C") {
+			sendTargets = append(sendTargets, groupID)
+			targetNames = append(targetNames, "グループ")
+			logInfo("グループID追加", map[string]interface{}{
+				"request_id":   requestID,
+				"group_id":     groupID,
+				"valid_format": true,
+			})
+		} else {
+			logError("グループID形式が無効", nil, map[string]interface{}{
+				"request_id": requestID,
+				"group_id":   groupID,
+				"length":     len(groupID),
+				"prefix": func() string {
+					if len(groupID) > 0 {
+						return groupID[:1]
+					} else {
+						return ""
+					}
+				}(),
+				"expected_format": "Cで始まる33文字の文字列",
+			})
+		}
 	}
 
 	// 複数IDが設定されている場合（カンマ区切り）
 	if multipleIDs != "" {
 		ids := strings.Split(multipleIDs, ",")
+		validCount := 0
 		for _, id := range ids {
 			id = strings.TrimSpace(id)
 			if id != "" {
-				sendTargets = append(sendTargets, id)
-				targetNames = append(targetNames, "複数ID")
+				// IDの形式を検証（UまたはCで始まる33文字の文字列）
+				if len(id) == 33 && (strings.HasPrefix(id, "U") || strings.HasPrefix(id, "C")) {
+					sendTargets = append(sendTargets, id)
+					targetNames = append(targetNames, "複数ID")
+					validCount++
+				} else {
+					logError("複数IDの形式が無効", nil, map[string]interface{}{
+						"request_id": requestID,
+						"invalid_id": id,
+						"length":     len(id),
+						"prefix": func() string {
+							if len(id) > 0 {
+								return id[:1]
+							} else {
+								return ""
+							}
+						}(),
+						"expected_format": "UまたはCで始まる33文字の文字列",
+					})
+				}
 			}
 		}
+		logInfo("複数ID追加", map[string]interface{}{
+			"request_id":   requestID,
+			"multiple_ids": multipleIDs,
+			"parsed_count": len(ids),
+			"valid_count":  validCount,
+		})
 	}
 
 	// 送信先が設定されていない場合
 	if len(sendTargets) == 0 {
-		err := fmt.Errorf("送信先が設定されていません（LINE_USER_ID、LINE_GROUP_ID、LINE_MULTIPLE_IDSのいずれかが必要）")
+		err := fmt.Errorf("有効な送信先が設定されていません（LINE_USER_ID、LINE_GROUP_ID、LINE_MULTIPLE_IDSのいずれかが必要で、正しい形式である必要があります）")
 		logError("送信先未設定", err, map[string]interface{}{
-			"request_id": requestID,
+			"request_id":       requestID,
+			"user_id_set":      userID != "",
+			"group_id_set":     groupID != "",
+			"multiple_ids_set": multipleIDs != "",
+			"user_id":          userID,
+			"group_id":         groupID,
+			"multiple_ids":     multipleIDs,
 		})
 		return err
 	}
@@ -284,18 +369,37 @@ func executeScheduledTask(requestID string) error {
 	successCount := 0
 
 	for i, target := range sendTargets {
+		// 送信先のタイプを判定
+		targetType := "unknown"
+		if target == userID {
+			targetType = "user"
+		} else if target == groupID {
+			targetType = "group"
+		} else {
+			targetType = "multiple_id"
+		}
+
+		logInfo("プッシュメッセージ送信試行", map[string]interface{}{
+			"request_id":   requestID,
+			"target":       target,
+			"target_type":  targetType,
+			"target_index": i,
+		})
+
 		if err := lineBotHandler.SendPushMessage(target, message); err != nil {
 			logError("プッシュメッセージ送信失敗", err, map[string]interface{}{
 				"request_id":   requestID,
 				"target":       target,
+				"target_type":  targetType,
 				"target_index": i,
 			})
-			errors = append(errors, fmt.Sprintf("target %s: %v", target, err))
+			errors = append(errors, fmt.Sprintf("target %s (%s): %v", target, targetType, err))
 		} else {
 			successCount++
 			logInfo("プッシュメッセージ送信成功", map[string]interface{}{
 				"request_id":   requestID,
 				"target":       target,
+				"target_type":  targetType,
 				"target_index": i,
 			})
 		}
