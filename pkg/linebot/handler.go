@@ -427,9 +427,24 @@ func (h *Handler) getBalanceMessage() (string, error) {
 		return "", fmt.Errorf("残高取得失敗: %v", err)
 	}
 
+	// 主要な残高を取得
+	jpyBalance := ""
+	btcBalance := ""
+
+	if jpyVal, exists := balance.Data["jpy"]; exists {
+		if jpyStr, ok := jpyVal.(string); ok {
+			jpyBalance = jpyStr
+		}
+	}
+	if btcVal, exists := balance.Data["btc"]; exists {
+		if btcStr, ok := btcVal.(string); ok {
+			btcBalance = btcStr
+		}
+	}
+
 	logInfo("Coincheck残高取得完了", map[string]interface{}{
-		"jpy_balance": balance.Data.JPY,
-		"btc_balance": balance.Data.BTC,
+		"jpy_balance": jpyBalance,
+		"btc_balance": btcBalance,
 	})
 
 	return h.coincheck.FormatBalanceMessage(balance), nil

@@ -76,62 +76,8 @@ type Client struct {
 
 // BalanceResponse 残高レスポンス
 type BalanceResponse struct {
-	Success bool `json:"success"`
-	Data    struct {
-		JPY   string `json:"jpy"`
-		BTC   string `json:"btc"`
-		ETH   string `json:"eth"`
-		ETC   string `json:"etc"`
-		LSK   string `json:"lsk"`
-		FCT   string `json:"fct"`
-		XRP   string `json:"xrp"`
-		XEM   string `json:"xem"`
-		LTC   string `json:"ltc"`
-		BCH   string `json:"bch"`
-		MONA  string `json:"mona"`
-		XLM   string `json:"xlm"`
-		QTUM  string `json:"qtum"`
-		DASH  string `json:"dash"`
-		ZEC   string `json:"zec"`
-		BAT   string `json:"bat"`
-		IOST  string `json:"iost"`
-		ENJ   string `json:"enj"`
-		OMG   string `json:"omg"`
-		PLT   string `json:"plt"`
-		XTZ   string `json:"xtz"`
-		ATOM  string `json:"atom"`
-		MKR   string `json:"mkr"`
-		LINK  string `json:"link"`
-		COMP  string `json:"comp"`
-		YFI   string `json:"yfi"`
-		UNI   string `json:"uni"`
-		AAVE  string `json:"aave"`
-		SNX   string `json:"snx"`
-		CRV   string `json:"crv"`
-		MATIC string `json:"matic"`
-		SOL   string `json:"sol"`
-		AVAX  string `json:"avax"`
-		DOT   string `json:"dot"`
-		ADA   string `json:"ada"`
-		SHIB  string `json:"shib"`
-		DOGE  string `json:"doge"`
-		TRX   string `json:"trx"`
-		NEAR  string `json:"near"`
-		FTM   string `json:"ftm"`
-		ALGO  string `json:"algo"`
-		MANA  string `json:"mana"`
-		SAND  string `json:"sand"`
-		AXS   string `json:"axs"`
-		CHZ   string `json:"chz"`
-		FLOW  string `json:"flow"`
-		ICP   string `json:"icp"`
-		VET   string `json:"vet"`
-		FIL   string `json:"fil"`
-		THETA string `json:"theta"`
-		EOS   string `json:"eos"`
-		KLAY  string `json:"klay"`
-		HBAR  string `json:"hbar"`
-	} `json:"data"`
+	Success bool                   `json:"success"`
+	Data    map[string]interface{} `json:"data"`
 }
 
 // TickerResponse ティッカーレスポンス（価格情報）
@@ -263,9 +209,10 @@ func (c *Client) GetBalance() (*BalanceResponse, error) {
 	}
 
 	// デバッグ: 実際のAPIレスポンスをログ出力
-	logDebug("Coincheck APIレスポンス詳細", map[string]interface{}{
-		"raw_response": string(body),
-		"success":      balance.Success,
+	logInfo("Coincheck APIレスポンス詳細", map[string]interface{}{
+		"raw_response":  string(body),
+		"success":       balance.Success,
+		"response_size": len(body),
 	})
 
 	if !balance.Success {
@@ -275,14 +222,35 @@ func (c *Client) GetBalance() (*BalanceResponse, error) {
 		return nil, fmt.Errorf("API呼び出し失敗")
 	}
 
+	// 主要な残高を取得
+	jpyBalance := ""
+	btcBalance := ""
+	ethBalance := ""
+
+	if jpyVal, exists := balance.Data["jpy"]; exists {
+		if jpyStr, ok := jpyVal.(string); ok {
+			jpyBalance = jpyStr
+		}
+	}
+	if btcVal, exists := balance.Data["btc"]; exists {
+		if btcStr, ok := btcVal.(string); ok {
+			btcBalance = btcStr
+		}
+	}
+	if ethVal, exists := balance.Data["eth"]; exists {
+		if ethStr, ok := ethVal.(string); ok {
+			ethBalance = ethStr
+		}
+	}
+
 	logInfo("残高取得完了", map[string]interface{}{
-		"jpy_balance": balance.Data.JPY,
-		"btc_balance": balance.Data.BTC,
-		"eth_balance": balance.Data.ETH,
+		"jpy_balance": jpyBalance,
+		"btc_balance": btcBalance,
+		"eth_balance": ethBalance,
 		"raw_data": map[string]interface{}{
-			"jpy": balance.Data.JPY,
-			"btc": balance.Data.BTC,
-			"eth": balance.Data.ETH,
+			"jpy": jpyBalance,
+			"btc": btcBalance,
+			"eth": ethBalance,
 		},
 	})
 
@@ -344,8 +312,14 @@ func (c *Client) GetTicker(pair string) (*TickerResponse, error) {
 func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	message := "💰 Coincheck 口座残高\n\n"
 
-	// JPY残高
-	jpyBalance := strings.TrimSpace(balance.Data.JPY)
+	// JPY残高を取得
+	jpyBalance := ""
+	if jpyVal, exists := balance.Data["jpy"]; exists {
+		if jpyStr, ok := jpyVal.(string); ok {
+			jpyBalance = strings.TrimSpace(jpyStr)
+		}
+	}
+
 	if jpyBalance != "" && jpyBalance != "0" {
 		message += fmt.Sprintf("💴 JPY: %s円\n", jpyBalance)
 	} else if jpyBalance == "" {
@@ -354,67 +328,25 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 	}
 
 	// 暗号通貨残高（0以外のみ表示）
-	cryptoAssets := map[string]string{
-		"BTC":   balance.Data.BTC,
-		"ETH":   balance.Data.ETH,
-		"ETC":   balance.Data.ETC,
-		"LSK":   balance.Data.LSK,
-		"FCT":   balance.Data.FCT,
-		"XRP":   balance.Data.XRP,
-		"XEM":   balance.Data.XEM,
-		"LTC":   balance.Data.LTC,
-		"BCH":   balance.Data.BCH,
-		"MONA":  balance.Data.MONA,
-		"XLM":   balance.Data.XLM,
-		"QTUM":  balance.Data.QTUM,
-		"DASH":  balance.Data.DASH,
-		"ZEC":   balance.Data.ZEC,
-		"BAT":   balance.Data.BAT,
-		"IOST":  balance.Data.IOST,
-		"ENJ":   balance.Data.ENJ,
-		"OMG":   balance.Data.OMG,
-		"PLT":   balance.Data.PLT,
-		"XTZ":   balance.Data.XTZ,
-		"ATOM":  balance.Data.ATOM,
-		"MKR":   balance.Data.MKR,
-		"LINK":  balance.Data.LINK,
-		"COMP":  balance.Data.COMP,
-		"YFI":   balance.Data.YFI,
-		"UNI":   balance.Data.UNI,
-		"AAVE":  balance.Data.AAVE,
-		"SNX":   balance.Data.SNX,
-		"CRV":   balance.Data.CRV,
-		"MATIC": balance.Data.MATIC,
-		"SOL":   balance.Data.SOL,
-		"AVAX":  balance.Data.AVAX,
-		"DOT":   balance.Data.DOT,
-		"ADA":   balance.Data.ADA,
-		"SHIB":  balance.Data.SHIB,
-		"DOGE":  balance.Data.DOGE,
-		"TRX":   balance.Data.TRX,
-		"NEAR":  balance.Data.NEAR,
-		"FTM":   balance.Data.FTM,
-		"ALGO":  balance.Data.ALGO,
-		"MANA":  balance.Data.MANA,
-		"SAND":  balance.Data.SAND,
-		"AXS":   balance.Data.AXS,
-		"CHZ":   balance.Data.CHZ,
-		"FLOW":  balance.Data.FLOW,
-		"ICP":   balance.Data.ICP,
-		"VET":   balance.Data.VET,
-		"FIL":   balance.Data.FIL,
-		"THETA": balance.Data.THETA,
-		"EOS":   balance.Data.EOS,
-		"KLAY":  balance.Data.KLAY,
-		"HBAR":  balance.Data.HBAR,
+	cryptoAssets := []string{
+		"btc", "eth", "etc", "lsk", "fct", "xrp", "xem", "ltc", "bch", "mona",
+		"xlm", "qtum", "dash", "zec", "bat", "iost", "enj", "omg", "plt", "xtz",
+		"atom", "mkr", "link", "comp", "yfi", "uni", "aave", "snx", "crv", "matic",
+		"sol", "avax", "dot", "ada", "shib", "doge", "trx", "near", "ftm", "algo",
+		"mana", "sand", "axs", "chz", "flow", "icp", "vet", "fil", "theta", "eos",
+		"klay", "hbar",
 	}
 
 	hasCryptoBalance := false
-	for symbol, amount := range cryptoAssets {
-		trimmedAmount := strings.TrimSpace(amount)
-		if trimmedAmount != "" && trimmedAmount != "0" {
-			message += fmt.Sprintf("🪙 %s: %s\n", symbol, trimmedAmount)
-			hasCryptoBalance = true
+	for _, symbol := range cryptoAssets {
+		if val, exists := balance.Data[symbol]; exists {
+			if amountStr, ok := val.(string); ok {
+				trimmedAmount := strings.TrimSpace(amountStr)
+				if trimmedAmount != "" && trimmedAmount != "0" {
+					message += fmt.Sprintf("🪙 %s: %s\n", strings.ToUpper(symbol), trimmedAmount)
+					hasCryptoBalance = true
+				}
+			}
 		}
 	}
 
