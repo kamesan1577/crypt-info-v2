@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"crypt-info-v2/internal/coincheck"
+	"crypt-info-v2/pkg/coincheck"
 
 	"github.com/line/line-bot-sdk-go/v8/linebot"
 )

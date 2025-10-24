@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"crypt-info-v2/internal/linebot"
+	"crypt-info-v2/pkg/linebot"
 )
 
 var lineBotHandler *linebot.Handler
