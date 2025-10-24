@@ -347,12 +347,12 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 
 	// JPY残高を取得
 	jpyBalance := strings.TrimSpace(balance.JPY)
-
+	jpyAmount := 0.0
 	if jpyBalance != "" && jpyBalance != "0" {
+		if parsed, err := strconv.ParseFloat(jpyBalance, 64); err == nil {
+			jpyAmount = parsed
+		}
 		message += fmt.Sprintf("💴 JPY: %s円\n", jpyBalance)
-	} else if jpyBalance == "" {
-		// 空文字列の場合は0として扱う
-		message += "💴 JPY: 0円\n"
 	}
 
 	// 暗号通貨残高（0以外のみ表示）
@@ -411,20 +411,90 @@ func (c *Client) FormatBalanceMessage(balance *BalanceResponse) string {
 		"HBAR":  balance.HBAR,
 	}
 
-	hasCryptoBalance := false
+	// Coincheckでサポートされている通貨ペアのマッピング
+	supportedPairs := map[string]string{
+		"BTC":   "btc_jpy",
+		"ETH":   "eth_jpy",
+		"ETC":   "etc_jpy",
+		"LSK":   "lsk_jpy",
+		"FCT":   "fct_jpy",
+		"XRP":   "xrp_jpy",
+		"XEM":   "xem_jpy",
+		"LTC":   "ltc_jpy",
+		"BCH":   "bch_jpy",
+		"MONA":  "mona_jpy",
+		"XLM":   "xlm_jpy",
+		"QTUM":  "qtum_jpy",
+		"DASH":  "dash_jpy",
+		"ZEC":   "zec_jpy",
+		"BAT":   "bat_jpy",
+		"IOST":  "iost_jpy",
+		"ENJ":   "enj_jpy",
+		"OMG":   "omg_jpy",
+		"PLT":   "plt_jpy",
+		"XTZ":   "xtz_jpy",
+		"ATOM":  "atom_jpy",
+		"MKR":   "mkr_jpy",
+		"LINK":  "link_jpy",
+		"COMP":  "comp_jpy",
+		"YFI":   "yfi_jpy",
+		"UNI":   "uni_jpy",
+		"AAVE":  "aave_jpy",
+		"SNX":   "snx_jpy",
+		"CRV":   "crv_jpy",
+		"MATIC": "matic_jpy",
+		"SOL":   "sol_jpy",
+		"AVAX":  "avax_jpy",
+		"DOT":   "dot_jpy",
+		"ADA":   "ada_jpy",
+		"SHIB":  "shib_jpy",
+		"DOGE":  "doge_jpy",
+		"TRX":   "trx_jpy",
+		"NEAR":  "near_jpy",
+		"FTM":   "ftm_jpy",
+		"ALGO":  "algo_jpy",
+		"MANA":  "mana_jpy",
+		"SAND":  "sand_jpy",
+		"AXS":   "axs_jpy",
+		"CHZ":   "chz_jpy",
+		"FLOW":  "flow_jpy",
+		"ICP":   "icp_jpy",
+		"VET":   "vet_jpy",
+		"FIL":   "fil_jpy",
+		"THETA": "theta_jpy",
+		"EOS":   "eos_jpy",
+		"KLAY":  "klay_jpy",
+		"HBAR":  "hbar_jpy",
+	}
+
+	totalCryptoValue := 0.0
+
 	for symbol, amount := range cryptoAssets {
 		trimmedAmount := strings.TrimSpace(amount)
 		if trimmedAmount != "" && trimmedAmount != "0" {
-			message += fmt.Sprintf("🪙 %s: %s\n", symbol, trimmedAmount)
-			hasCryptoBalance = true
+			// 金額を数値に変換
+			if parsedAmount, err := strconv.ParseFloat(trimmedAmount, 64); err == nil && parsedAmount > 0 {
+				message += fmt.Sprintf("🪙 %s: %s", symbol, trimmedAmount)
+
+				// 価格情報を取得して円換算
+				if pair, exists := supportedPairs[symbol]; exists {
+					if ticker, err := c.GetTicker(pair); err == nil {
+						cryptoValue := parsedAmount * ticker.Last
+						totalCryptoValue += cryptoValue
+						message += fmt.Sprintf(" (約%.0f円)", cryptoValue)
+					}
+				}
+				message += "\n"
+			}
 		}
 	}
 
-	// 残高がすべて0または空の場合の処理を改善
-	if jpyBalance == "" || jpyBalance == "0" {
-		if !hasCryptoBalance {
-			message += "\n📊 現在の残高: 0円"
-		}
+	// 合計金額を表示
+	totalValue := jpyAmount + totalCryptoValue
+	if totalValue > 0 {
+		message += fmt.Sprintf("\n📊 合計: 約%.0f円", totalValue)
+	} else {
+		message += "\n📊 現在の残高: 0円"
 	}
 
 	// 日本時間で表示
